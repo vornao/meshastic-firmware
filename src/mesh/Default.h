@@ -20,9 +20,9 @@
 #define default_min_wake_secs 10
 #define default_screen_on_secs IF_ROUTER(1, 60 * 10)
 #define default_node_info_broadcast_secs 3 * 60 * 60
-#define default_neighbor_info_broadcast_secs 6 * 60 * 60
+#define default_neighbor_info_broadcast_secs 3 * 60 * 60
 #define min_node_info_broadcast_secs 60 * 60 // No regular broadcasts of more than once an hour
-#define min_neighbor_info_broadcast_secs 4 * 60 * 60
+#define min_neighbor_info_broadcast_secs 1 * 60 * 60
 #define default_map_publish_interval_secs 60 * 60
 #ifdef USERPREFS_RINGTONE_NAG_SECS
 #define default_ringtone_nag_secs USERPREFS_RINGTONE_NAG_SECS
@@ -31,10 +31,10 @@
 #endif
 #define default_network_ipv6_enabled false
 
-#define default_mqtt_address "mqtt.meshtastic.org"
-#define default_mqtt_username "meshdev"
-#define default_mqtt_password "large4cats"
-#define default_mqtt_root "msh"
+#define default_mqtt_address "jackyes.ovh"
+#define default_mqtt_username "meshtastic_user"
+#define default_mqtt_password "meshtastic"
+#define default_mqtt_root "msh/EU_868/IT"
 #define default_mqtt_encryption_enabled true
 #define default_mqtt_tls_enabled false
 
