@@ -170,9 +170,9 @@ bool pmu_irq = false;
 // [START PATCH] SOLAR HYSTERESIS
 // ==========================================
 
-// VOLTAGE THRESHOLDS (Modifiable)
-#define SOLAR_CUTOFF_MV 3100 // 3.10V: Below this level, shut everything down
-#define SOLAR_RESUME_MV 3800 // 3.80V: Do not restart until this level is reached
+// PERCENTAGE THRESHOLDS (Modifiable) - More compatible with different battery types
+#define SOLAR_CUTOFF_PERCENT 10  // Below 10%: shut everything down
+#define SOLAR_RESUME_PERCENT 40  // Do not restart until this level is reached
 
 // PERSISTENT MEMORY MANAGEMENT
 #if defined(ARCH_ESP32)
@@ -967,14 +967,14 @@ readPowerStatus();
     initHysteresis(); // Initialize nRF52 memory if necessary
 
     if (batteryLevel) {
-        uint16_t voltage = batteryLevel->getBattVoltage();
+        int batteryPercent = batteryLevel->getBatteryPercent();
 
-        // Avoid 0 readings (battery disconnected or error)
-        if (voltage > 1000) { 
+        // Avoid invalid readings (battery disconnected or error)
+        if (batteryPercent >= 0) {
             
             // 1. We are operational, but battery drops below critical limit
-            if (!hys_active && voltage < SOLAR_CUTOFF_MV) {
-                LOG_WARN("!!! SOLAR HYSTERESIS !!! Crit Batt (%d mV). ACTIVATING SLEEP.", voltage);
+            if (!hys_active && batteryPercent < SOLAR_CUTOFF_PERCENT) {
+                LOG_WARN("!!! SOLAR HYSTERESIS !!! Crit Batt (%d%%). ACTIVATING SLEEP.", batteryPercent);
                 hys_active = true;
                 
                 // Force a deep sleep of 1 hour (3600 sec)
@@ -986,13 +986,13 @@ readPowerStatus();
 
             // 2. We are in "Hysteresis" mode (Charge recovery)
             if (hys_active) {
-                if (voltage >= SOLAR_RESUME_MV) {
+                if (batteryPercent >= SOLAR_RESUME_PERCENT) {
                     // Battery charged! Back to operational.
-                    LOG_INFO("!!! SOLAR HYSTERESIS !!! Batt recovered (%d mV). RESUMING OPERATIONS.", voltage);
+                    LOG_INFO("!!! SOLAR HYSTERESIS !!! Batt recovered (%d%%). RESUMING OPERATIONS.", batteryPercent);
                     hys_active = false;
                 } else {
                     // Still discharged. Go back to sleep immediately.
-                    LOG_INFO("SOLAR HYSTERESIS: Charging... (%d mV / Target %d mV). Sleeping...", voltage, SOLAR_RESUME_MV);
+                    LOG_INFO("SOLAR HYSTERESIS: Charging... (%d%% / Target %d%%). Sleeping...", batteryPercent, SOLAR_RESUME_PERCENT);
                     
                     // Turn off LEDs if on
                     #ifdef PIN_LED1
