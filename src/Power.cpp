@@ -166,6 +166,48 @@ class HasBatteryLevel
 
 bool pmu_irq = false;
 
+// ==========================================
+// [START PATCH] SOLAR HYSTERESIS
+// ==========================================
+
+// VOLTAGE THRESHOLDS (Modifiable)
+#define SOLAR_CUTOFF_MV 3100 // 3.10V: Below this level, shut everything down
+#define SOLAR_RESUME_MV 3800 // 3.80V: Do not restart until this level is reached
+
+// PERSISTENT MEMORY MANAGEMENT
+#if defined(ARCH_ESP32)
+    // ESP32: Uses RTC_DATA_ATTR to survive Deep Sleep
+    RTC_DATA_ATTR bool hys_active = false;
+    
+    void initHysteresis() { /* No init required for ESP32 */ }
+
+#elif defined(ARCH_NRF52)
+    // nRF52: Uses .noinit section. Requires a "Magic Number" for the first boot.
+    struct HysteresisState {
+        uint32_t magic;
+        bool active;
+    };
+    __attribute__((section(".noinit"))) HysteresisState hys_state;
+
+    void initHysteresis() {
+        // 0xCAFEBABE is an arbitrary number. If it's not present, it indicates the first boot.
+        if (hys_state.magic != 0xCAFEBABE) {
+            hys_state.magic = 0xCAFEBABE;
+            hys_state.active = false;
+        }
+    }
+    // Macro to use the same variable name as ESP32
+    #define hys_active hys_state.active
+
+#else
+    // Fallback for other architectures
+    bool hys_active = false;
+    void initHysteresis() {}
+#endif
+
+// ==========================================
+// [END PATCH] VARIABLES
+// ==========================================
 Power *power;
 
 using namespace meshtastic;
@@ -917,7 +959,55 @@ void Power::readPowerStatus()
 
 int32_t Power::runOnce()
 {
-    readPowerStatus();
+readPowerStatus();
+
+    // ==========================================
+    // [START PATCH] HYSTERESIS LOGIC
+    // ==========================================
+    initHysteresis(); // Initialize nRF52 memory if necessary
+
+    if (batteryLevel) {
+        uint16_t voltage = batteryLevel->getBattVoltage();
+
+        // Avoid 0 readings (battery disconnected or error)
+        if (voltage > 1000) { 
+            
+            // 1. We are operational, but battery drops below critical limit
+            if (!hys_active && voltage < SOLAR_CUTOFF_MV) {
+                LOG_WARN("!!! SOLAR HYSTERESIS !!! Crit Batt (%d mV). ACTIVATING SLEEP.", voltage);
+                hys_active = true;
+                
+                // Force a deep sleep of 1 hour (3600 sec)
+                // On ESP32 this restarts the system in 1 hour.
+                // On nRF52 this pauses execution.
+                doDeepSleep(3600, true, true);
+                return 3600 * 1000; // If doDeepSleep returns (nRF), tell the system to wait
+            }
+
+            // 2. We are in "Hysteresis" mode (Charge recovery)
+            if (hys_active) {
+                if (voltage >= SOLAR_RESUME_MV) {
+                    // Battery charged! Back to operational.
+                    LOG_INFO("!!! SOLAR HYSTERESIS !!! Batt recovered (%d mV). RESUMING OPERATIONS.", voltage);
+                    hys_active = false;
+                } else {
+                    // Still discharged. Go back to sleep immediately.
+                    LOG_INFO("SOLAR HYSTERESIS: Charging... (%d mV / Target %d mV). Sleeping...", voltage, SOLAR_RESUME_MV);
+                    
+                    // Turn off LEDs if on
+                    #ifdef PIN_LED1
+                    digitalWrite(PIN_LED1, 0);
+                    #endif
+
+                    doDeepSleep(3600, true, true); // Sleep for another hour
+                    return 3600 * 1000;
+                }
+            }
+        }
+    }
+    // ==========================================
+    // [END PATCH] LOGIC
+    // ==========================================
 
 #ifdef HAS_PMU
     // WE no longer use the IRQ line to wake the CPU (due to false wakes from sleep), but we do poll
