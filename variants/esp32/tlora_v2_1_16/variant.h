@@ -8,6 +8,9 @@
 #define I2C_SDA 21 // I2C pins for this board
 #define I2C_SCL 22
 
+#define BUTTON_PIN 12
+#define BUTTON_NEED_PULLUP
+
 #if defined(LED_PIN) && LED_PIN == -1
 #undef LED_PIN
 #else
@@ -27,3 +30,4 @@
 #endif
 
 #define LORA_DIO2 32 // Not really used
+
