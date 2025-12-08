@@ -94,7 +94,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     // Battery level thresholds for traffic management
     static const int BATTERY_CRITICAL_THRESHOLD = 10;  // Below 10%: Survival mode
     static const int BATTERY_LOW_THRESHOLD = 20;       // Below 20%: Restricted mode
-    static const int BATTERY_MEDIUM_THRESHOLD = 35;    // Below 35%: Conservative mode
+    static const int BATTERY_MEDIUM_THRESHOLD = 30;    // Below 35%: Conservative mode
 
     /**
      * Check if we should forward a packet based on current battery level
