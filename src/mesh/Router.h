@@ -91,6 +91,29 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
 
+    // Battery level thresholds for traffic management
+    static const int BATTERY_CRITICAL_THRESHOLD = 10;  // Below 10%: Survival mode
+    static const int BATTERY_LOW_THRESHOLD = 20;       // Below 20%: Restricted mode
+    static const int BATTERY_MEDIUM_THRESHOLD = 30;    // Below 35%: Conservative mode
+
+    /**
+     * Check if we should forward a packet based on current battery level
+     * @return true if packet should be forwarded, false to drop
+     */
+    bool shouldForwardPacket(const meshtastic_MeshPacket *p);
+    
+    /**
+     * Get current battery percentage
+     * @return battery percentage (0-100) or -1 if unknown
+     */
+    int getBatteryLevel();
+    
+    /**
+     * Check if a packet is considered critical (should always forward)
+     * @return true if packet is critical
+     */
+    bool isCriticalPacket(const meshtastic_MeshPacket *p);
+
   protected:
     friend class RoutingModule;
 

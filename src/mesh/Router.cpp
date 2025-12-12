@@ -86,47 +86,112 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         return true; // Always decrement on first hop
     }
 
-    // Check if both local device and previous relay are routers (including CLIENT_BASE)
-    bool localIsRouter =
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                  meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
-
-    // If local device isn't a router, always decrement
-    if (!localIsRouter) {
-        return true;
-    }
-
-    // For subsequent hops, check if previous relay is a favorite router
-    // Optimized search for favorite routers with matching last byte
-    // Check ordering optimized for IoT devices (cheapest checks first)
+    // For subsequent hops, check the previous relay node
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
         if (!node)
             continue;
 
-        // Check 1: is_favorite (cheapest - single bool)
-        if (!node->is_favorite)
-            continue;
-
-        // Check 2: has_user (cheap - single bool)
-        if (!node->has_user)
-            continue;
-
-        // Check 3: role check (moderate cost - multiple comparisons)
-        if (!IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
-                       meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)) {
-            continue;
-        }
-
-        // Check 4: last byte extraction and comparison (most expensive)
+        // Check if this node is the relay_node
         if (nodeDB->getLastByteOfNodeNum(node->num) == p->relay_node) {
-            // Found a favorite router match
-            LOG_DEBUG("Identified favorite relay router 0x%x from last byte 0x%x", node->num, p->relay_node);
-            return false; // Don't decrement hop_limit
+            // If the relay_node is a ROUTER, ROUTER_LATE, CLIENT_BASE, or a favorite node, do not decrement hop_limit
+            if (node->is_favorite ||
+                (node->has_user && IS_ONE_OF(node->user.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                             meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                                             meshtastic_Config_DeviceConfig_Role_CLIENT_BASE))) {
+                LOG_DEBUG("Packet from router/favorite 0x%x, not decrementing hop limit", node->num);
+                return false; // Don't decrement hop_limit
+            }
+            // Found the relay node, no need to check further
+            break;
         }
     }
 
-    // No favorite router match found, decrement hop_limit
+    // No matching condition found, decrement hop_limit
+    return true;
+}
+
+int Router::getBatteryLevel()
+{
+    if (powerStatus && powerStatus->getHasBattery() == 1) {
+        return powerStatus->getBatteryChargePercent();
+    }
+    return -1; // Unknown or no battery
+}
+
+bool Router::isCriticalPacket(const meshtastic_MeshPacket *p)
+{
+    // Critical packets that should always be forwarded if possible
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        meshtastic_PortNum portnum = p->decoded.portnum;
+        
+        // Routing packets (ACKs, NAKs) are always critical
+        if (portnum == meshtastic_PortNum_ROUTING_APP) {
+            return true;
+        }
+        
+        // Admin packets are critical for network management
+        if (portnum == meshtastic_PortNum_ADMIN_APP) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Router::shouldForwardPacket(const meshtastic_MeshPacket *p)
+{
+    int batteryLevel = getBatteryLevel();
+    
+    // If no battery or battery level unknown, allow all traffic
+    if (batteryLevel < 0) {
+        return true;
+    }
+    
+    // Survival mode: < 10% battery
+    if (batteryLevel < BATTERY_CRITICAL_THRESHOLD) {
+        // Only forward critical routing packets (ACKs, NAKs)
+        return isCriticalPacket(p);
+    }
+    
+    // Restricted mode: 10-20% battery
+    if (batteryLevel < BATTERY_LOW_THRESHOLD) {
+        // Forward critical packets
+        if (isCriticalPacket(p)) {
+            return true;
+        }
+        
+        // Forward only direct messages to this node
+        if (isToUs(p) && !isBroadcast(p->to)) {
+            return true;
+        }
+        
+        // Drop everything else
+        return false;
+    }
+    
+    // Conservative mode: 20-30% battery
+    if (batteryLevel < BATTERY_MEDIUM_THRESHOLD) {
+        // Forward critical packets
+        if (isCriticalPacket(p)) {
+            return true;
+        }
+        
+        // Forward direct messages to this node
+        if (isToUs(p) && !isBroadcast(p->to)) {
+            return true;
+        }
+        
+        // Drop broadcast packets to save power
+        if (isBroadcast(p->to)) {
+            LOG_DEBUG("Battery %d%%: Dropping broadcast packet to save power", batteryLevel);
+            return false;
+        }
+        
+        // Allow other direct messages but log them
+        return true;
+    }
+    
+    // Normal mode: > 50% battery - allow all traffic
     return true;
 }
 
@@ -292,6 +357,14 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         packetPool.release(p);
         return meshtastic_Routing_Error_BAD_REQUEST;
     } // should have already been handled by sendLocal
+
+    // Check battery level before sending non-critical packets
+    int batteryLevel = getBatteryLevel();
+    if (batteryLevel >= 0 && batteryLevel < BATTERY_LOW_THRESHOLD && !isCriticalPacket(p)) {
+        LOG_WARN("Battery %d%%: Dropping non-critical packet id=0x%08x", batteryLevel, p->id);
+        packetPool.release(p);
+        return meshtastic_Routing_Error_DUTY_CYCLE_LIMIT; // Use existing error code
+    }
 
     // Abort sending if we are violating the duty cycle
     if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
@@ -685,6 +758,34 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     bool skipHandle = false;
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+
+    // Check battery level and packet forwarding rules for packets we're forwarding
+    if (!isToUs(p) && !isFromUs(p)) {
+        if (!shouldForwardPacket(p)) {
+            LOG_DEBUG("Battery level: Dropping packet id=0x%08x from 0x%x to 0x%x",
+                     p->id, p->from, p->to);
+            skipHandle = true;
+        }
+    }
+    
+    // Also check if we should reduce rebroadcast probability based on battery
+    int batteryLevel = getBatteryLevel();
+    if (!skipHandle && batteryLevel >= 0 && batteryLevel < BATTERY_MEDIUM_THRESHOLD &&
+        isBroadcast(p->to) && !isFromUs(p)) {
+        
+        // Reduce rebroadcast probability in conservative/restricted modes
+        int dropChance = 0;
+        if (batteryLevel < BATTERY_LOW_THRESHOLD) {
+            dropChance = 50; // 50% drop chance in restricted mode
+        } else if (batteryLevel < BATTERY_MEDIUM_THRESHOLD) {
+            dropChance = 30; // 30% drop chance in conservative mode
+        }
+        
+        if (random(100) < dropChance) {
+            LOG_DEBUG("Battery %d%%: Randomly dropping broadcast to save power", batteryLevel);
+            skipHandle = true;
+        }
+    }
 
     // Store a copy of encrypted packet for MQTT
     DEBUG_HEAP_BEFORE;
