@@ -758,6 +758,7 @@ NodeNum Router::getNodeNum()
  */
 void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 {
+    meshtastic_MeshPacket *p_encrypted = nullptr;
     bool skipHandle = false;
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
