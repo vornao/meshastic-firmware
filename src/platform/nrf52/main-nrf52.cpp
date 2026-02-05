@@ -480,6 +480,16 @@ void cpuDeepSleep(uint32_t msecToWake)
         while (!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY))
             ;
 #endif
+        
+        // Enable RAM retention for all RAM blocks (valid for nRF52840)
+        // This is required to preserve the .noinit section (solar hysteresis state)
+#if ENABLE_RAM_RETENTION
+        LOG_DEBUG("Enabling RAM retention for DEEPSLEEP");
+        for (int i = 0; i <= 8; i++) {
+             NRF_POWER->RAM[i].POWERSET = (POWER_RAM_POWER_S0RETENTION_On << POWER_RAM_POWER_S0RETENTION_Pos) |
+                                          (POWER_RAM_POWER_S1RETENTION_On << POWER_RAM_POWER_S1RETENTION_Pos);
+        }
+#endif // ENABLE_RAM_RETENTION
 
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
