@@ -14,7 +14,7 @@
 #if defined(LED_PIN) && LED_PIN == -1
 #undef LED_PIN
 #else
-#define LED_PIN 25 // If defined we will blink this LED
+#define LED_POWER 25 // If defined we will blink this LED
 #endif
 
 #define USE_RF95
