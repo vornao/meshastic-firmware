@@ -194,7 +194,7 @@ template <typename T> bool SX126xInterface<T>::init()
         LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", result);
     }
 
-#ifdef USE_GC1109_PA
+//#ifdef USE_GC1109_PA
     // Undocumented SX1262 register patch recommended by Heltec/Semtech for improved RX sensitivity
     // on boards with the GC1109 FEM. Sets bit 0 of register 0x8B5.
     // Reference: https://github.com/meshcore-dev/MeshCore/pull/1398
@@ -203,7 +203,7 @@ template <typename T> bool SX126xInterface<T>::init()
     } else {
         LOG_WARN("Failed to apply SX1262 register 0x8B5 patch for GC1109");
     }
-#endif
+//#endif
 
 #if 0
     // Read/write a register we are not using (only used for FSK mode) to test SPI comms
