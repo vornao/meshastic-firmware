@@ -18,6 +18,7 @@
 #include "NodeDB.h"
 #include "ReplyBotModule.h"
 #include "mesh/MeshTypes.h"
+#include "PowerStatus.h"
 
 #include <Arduino.h>
 #include <cctype>
@@ -86,6 +87,19 @@ bool ReplyBotModule::wantPacket(const meshtastic_MeshPacket *p)
     return (p && p->decoded.portnum == ourPortNum);
 }
 
+uint32_t getBatteryPercent(const uint32_t voltageMv) {
+    // Simple linear mapping for demonstration purposes
+    const uint32_t minVoltage = 3300; // 3.3V = 0%
+    const uint32_t maxVoltage = 4200; // 4.2V = 100%
+    if (voltageMv <= minVoltage) {
+        return 0;
+    } else if (voltageMv >= maxVoltage) {
+        return 100;
+    } else {
+        return (voltageMv - minVoltage) * 100 / (maxVoltage - minVoltage);
+    }
+}
+
 ProcessMessage ReplyBotModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     // Accept only direct messages to us or broadcasts on the Primary channel
@@ -138,7 +152,25 @@ ProcessMessage ReplyBotModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     // Build the reply message and send it back via DM
     char reply[96];
-    snprintf(reply, sizeof(reply), "🎙️ Mic Check : %d Hops away | RSSI %d | SNR %.1f", hopsAway, rssi, snr);
+    if (strncmp(buf, "/battery", 8) == 0 || strncmp(buf, "/bat", 4) == 0) {
+        // For the battery command, include the battery voltage if available
+            uint32_t voltageMv = 0;
+            uint32_t batteryPercent = 0;
+            if (powerStatus && powerStatus->getHasBattery()) {
+                voltageMv = powerStatus->getBatteryVoltageMv();
+                batteryPercent = getBatteryPercent(voltageMv);
+                snprintf(reply, sizeof(reply), "🔋 %d%% (%dmV) | %d hops | RSSI %d | SNR %.1f",
+                        batteryPercent, voltageMv, hopsAway, rssi, snr);
+            }
+            else {
+                snprintf(reply, sizeof(reply), "🔋 Battery info unavailable | %d hops | RSSI %d | SNR %.1f",
+                        hopsAway, rssi, snr);
+            }    
+            
+    } else {
+        // else for other commands, keep the original reply format
+        snprintf(reply, sizeof(reply), "🎙️ Mic Check : %d Hops away | RSSI %d | SNR %.1f", hopsAway, rssi, snr);
+    }
     sendDm(mp, reply);
     return ProcessMessage::CONTINUE;
 }
@@ -158,6 +190,10 @@ bool ReplyBotModule::isCommand(const char *msg) const
     if (strncmp(msg, "/hello", 6) == 0 && isEndOrSpace(msg[6]))
         return true;
     if (strncmp(msg, "/test", 5) == 0 && isEndOrSpace(msg[5]))
+        return true;
+    if (strncmp(msg, "/battery", 8) == 0 && isEndOrSpace(msg[8]))
+        return true;
+    if (strncmp(msg, "/bat", 4) == 0 && isEndOrSpace(msg[4]))
         return true;
     return false;
 }

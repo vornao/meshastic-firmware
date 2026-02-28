@@ -785,7 +785,7 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 
     if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && lastPortNumToRadio[p.decoded.portnum] &&
         //custom modification from 30s to 10s cooldown for traceroute, before was THIRTY_SECONDS_MS
-        Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], TEN_SECONDS_MS)) { 
+        Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], FIVE_SECONDS_MS)) { 
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
 
         //custom modification from 30s to 10s cooldown for traceroute
@@ -803,7 +803,7 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     } else if (IS_ONE_OF(p.decoded.portnum, meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_WAYPOINT_APP,
                          meshtastic_PortNum_ALERT_APP, meshtastic_PortNum_TELEMETRY_APP) &&
                lastPortNumToRadio[p.decoded.portnum] &&
-               Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], TEN_SECONDS_MS)) {
+               Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], FIVE_SECONDS_MS)) {
         // TODO: [Issue #6700] Make this rate limit throttling scale up / down with the preset
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
         meshtastic_QueueStatus qs = router->getQueueStatus();
