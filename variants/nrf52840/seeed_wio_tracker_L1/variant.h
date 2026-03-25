@@ -7,6 +7,14 @@
 #define VARIANT_MCK (64000000ul) // Master clock frequency
 #define USE_LFXO                 // 32.768kHz crystal for LFCLK
 
+// Enable Traffic Management Module for Tracker L1
+#ifndef HAS_TRAFFIC_MANAGEMENT
+#define HAS_TRAFFIC_MANAGEMENT 1
+#endif
+#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048
+#endif
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Pin Capacity Definitions
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

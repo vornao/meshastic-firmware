@@ -229,6 +229,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
 #endif
 
     setIntervalFromNow(kMaintenanceIntervalMs);
+    TM_LOG_INFO("TrafficManagement Module initialized");
 }
 
 // Cache may have been allocated via ps_calloc (PSRAM, C allocator) or new[] (heap).

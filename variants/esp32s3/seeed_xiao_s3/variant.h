@@ -40,6 +40,14 @@ L76K GPS Module Information : https://www.seeedstudio.com/L76K-GNSS-Module-for-S
 #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 
+// Enable Traffic Management Module for XIAO S3
+#ifndef HAS_TRAFFIC_MANAGEMENT
+#define HAS_TRAFFIC_MANAGEMENT 1
+#endif
+#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048
+#endif
+
 /*Warning:
     https://www.seeedstudio.com/L76K-GNSS-Module-for-Seeed-Studio-XIAO-p-5864.html
     L76K Expansion Board can not directly used, L76K Reset Pin needs to override or physically remove it,
